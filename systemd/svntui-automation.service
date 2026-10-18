@@ -1,0 +1,18 @@
+[Unit]
+Description=svntui SVN 自动更新
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-%h/.config/svntui/automation.env
+ExecStart=%h/.local/bin/svntui automation run
+Restart=on-failure
+RestartSec=15s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=false
+
+[Install]
+WantedBy=default.target
