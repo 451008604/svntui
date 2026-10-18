@@ -24,13 +24,37 @@
 - Linux/macOS 需要 UTF-8 终端和 `stty`；Windows 10 或更高版本使用原生控制台，应用会启用 UTF-8 和虚拟终端模式。
 - 颜色不是识别状态的唯一方式，可使用 `--no-color`。
 
-## 构建与安装
+## 下载与安装
+
+从 [v0.2.0 Release](https://github.com/451008604/svntui/releases/tag/v0.2.0) 下载对应平台的压缩包，解压即可使用，无需安装 Go。安装包包含程序、MIT 许可证及离线安装和使用说明；系统 SVN 需要单独安装。
+
+| 平台 | 安装包 |
+| --- | --- |
+| macOS Apple 芯片（arm64） | [svntui-v0.2.0-macos-arm64.tar.gz](https://github.com/451008604/svntui/releases/download/v0.2.0/svntui-v0.2.0-macos-arm64.tar.gz) |
+| Linux Intel/AMD 64 位（amd64） | [svntui-v0.2.0-linux-amd64.tar.gz](https://github.com/451008604/svntui/releases/download/v0.2.0/svntui-v0.2.0-linux-amd64.tar.gz) |
+| Windows Intel/AMD 64 位（amd64） | [svntui-v0.2.0-windows-amd64.zip](https://github.com/451008604/svntui/releases/download/v0.2.0/svntui-v0.2.0-windows-amd64.zip) |
+
+按平台安装 SVN、配置 PATH、校验下载及升级/卸载步骤见 **[安装指南](docs/installation.md)**。Intel Mac、Linux ARM64 和 Windows ARM64 本次未提供原生预编译包，可按下节从源码构建。
+
+安装后，先确认依赖与程序能够运行：
+
+```bash
+svn --version --quiet
+svntui --help
+```
+
+然后在已有 SVN 工作副本目录执行 `svntui`，或运行 `svntui "/path/to/working-copy"`；Windows 示例为 `svntui "C:\work\project"`。新项目可先用 `svn checkout 仓库URL 本地目录` 检出并完成 SVN 认证。
+
+第一次使用：在工作区按 `d` 查看差异、`Space` 选择文件、`C` 打开提交页，填写说明后按 `Ctrl-S` 进入确认；`?` 查看帮助，`q` 退出。完整流程见 [工作流指南](docs/workflows.md)。
+
+## 从源码构建
 
 先取得源码：
 
 ```bash
 git clone https://github.com/451008604/svntui.git
 cd svntui
+git checkout v0.2.0
 ```
 
 Linux/macOS：
