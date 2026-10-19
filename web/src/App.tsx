@@ -304,6 +304,14 @@ function AuthenticatedApp({ version }: { version: string }) {
                     >
                       清理工作副本
                     </button>
+                    <button
+                      onClick={() =>
+                        beginOperation({ action: "delete", targets: [] })
+                      }
+                      disabled={active}
+                    >
+                      删除版本化路径…
+                    </button>
                     <button onClick={() => setRemove(true)} disabled={active}>
                       移除项目登记
                     </button>

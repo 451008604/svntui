@@ -183,3 +183,8 @@ export function jobNeedsRefresh(
     incoming.state !== "running" && (!previous || previous.state === "running")
   );
 }
+
+// 路径作为一个字面值传输；只判断非空，不拆分空格或解析 @。
+export function singlePathTarget(value: string): string[] {
+  return value.trim() ? [value] : [];
+}

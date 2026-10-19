@@ -10,6 +10,7 @@ import {
 } from "./api";
 import { Button, Modal, Icon, ErrorBox } from "./ui";
 import { actions, time } from "./shared";
+import { singlePathTarget } from "./state";
 export function OperationDialog({
   project,
   request,
@@ -29,6 +30,9 @@ export function OperationDialog({
     [error, setError] = useState<unknown>(null),
     [yes, setYes] = useState(""),
     [uncertain, setUncertain] = useState(false);
+  const manualDelete =
+    request.action === "delete" && request.targets.length === 0;
+  const [deletePath, setDeletePath] = useState("");
   const edit = (data: Partial<Operation>) => {
     setInput({ ...input, ...data });
     setPreview(null);
@@ -36,6 +40,7 @@ export function OperationDialog({
     setError(null);
   };
   const create = async () => {
+    if (manualDelete && !deletePath.trim()) return;
     setBusy(true);
     setError(null);
     try {
@@ -87,30 +92,56 @@ export function OperationDialog({
         </div>
         {!preview && (
           <>
-            <label>
-              操作范围
-              <select
-                aria-label="操作范围"
-                value={
-                  input.action === "update" && input.targets.length === 0
-                    ? "all"
-                    : "selected"
-                }
-                disabled={input.action !== "update"}
-                onChange={(e) =>
-                  edit({
-                    targets: e.target.value === "all" ? [] : request.targets,
-                  })
-                }
-              >
-                <option value="selected">
-                  所选路径（{input.targets.length}）
-                </option>
-                {input.action === "update" && (
-                  <option value="all">整个工作副本</option>
-                )}
-              </select>
-            </label>
+            {!manualDelete && (
+              <label>
+                操作范围
+                <select
+                  aria-label="操作范围"
+                  value={
+                    input.action === "update" && input.targets.length === 0
+                      ? "all"
+                      : "selected"
+                  }
+                  disabled={input.action !== "update"}
+                  onChange={(e) =>
+                    edit({
+                      targets: e.target.value === "all" ? [] : request.targets,
+                    })
+                  }
+                >
+                  <option value="selected">
+                    所选路径（{input.targets.length}）
+                  </option>
+                  {input.action === "update" && (
+                    <option value="all">整个工作副本</option>
+                  )}
+                </select>
+              </label>
+            )}
+            {input.action === "delete" && (
+              <div className="notice">
+                SVN
+                会拒绝删除含本地修改的路径。请先保存或提交需要保留的内容，再通过“还原”明确处理本地修改；干净的版本化文件可从项目菜单“删除版本化路径…”输入相对路径。
+              </div>
+            )}
+            {manualDelete && (
+              <label>
+                工作副本相对路径
+                <input
+                  aria-label="待删除的版本化相对路径"
+                  value={deletePath}
+                  onChange={(event) => {
+                    setDeletePath(event.target.value);
+                    edit({ targets: singlePathTarget(event.target.value) });
+                  }}
+                  placeholder="例如 docs/旧 文档@2026.txt"
+                  autoComplete="off"
+                />
+                <span className="muted">
+                  一次输入一个字面路径，空格、中文和 @ 均视为文件名的一部分。
+                </span>
+              </label>
+            )}
             {input.action === "update" && (
               <label>
                 目标修订
@@ -169,7 +200,11 @@ export function OperationDialog({
               {input.targets.length ? (
                 input.targets.map((p) => <code key={p}>{p}</code>)
               ) : (
-                <span>工作副本范围（预览将显示最终规范化范围）</span>
+                <span>
+                  {manualDelete
+                    ? "请先输入要删除的单个版本化相对路径"
+                    : "工作副本范围（预览将显示最终规范化范围）"}
+                </span>
               )}
             </div>
           </>
@@ -234,7 +269,11 @@ export function OperationDialog({
             </Button>
           </>
         ) : (
-          <Button primary onClick={create} disabled={busy}>
+          <Button
+            primary
+            onClick={create}
+            disabled={busy || (manualDelete && !deletePath.trim())}
+          >
             {busy ? "正在预览…" : "生成预览"}
           </Button>
         )}

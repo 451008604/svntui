@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import {
   DraftQueue,
+  singlePathTarget,
   mergeJobs,
   jobNeedsRefresh,
   parseDiff,
@@ -232,5 +233,18 @@ describe("monotonic job snapshots", () => {
     expect(merged.filter((j) => j.state !== "running")).toHaveLength(100);
     expect(merged.filter((j) => j.state === "running")).toHaveLength(2);
     expect(merged.some((j) => j.id === "finished-0")).toBe(false);
+  });
+});
+
+describe("explicit literal deletion paths", () => {
+  it("keeps spaces, Chinese and peg-looking @ characters as one exact target", () => {
+    expect(singlePathTarget("docs/旧 文档@2026.txt")).toEqual([
+      "docs/旧 文档@2026.txt",
+    ]);
+    expect(singlePathTarget(" file name ")).toEqual([" file name "]);
+  });
+  it("never turns an empty or whitespace-only field into whole-working-copy deletion", () => {
+    expect(singlePathTarget("")).toEqual([]);
+    expect(singlePathTarget("  ")).toEqual([]);
   });
 });
