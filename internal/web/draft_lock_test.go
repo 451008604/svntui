@@ -15,7 +15,13 @@ import (
 
 func sharedDraftServer(t *testing.T, f *fixture) *fixture {
 	t.Helper()
+	return sharedDraftServerAt(t, f, f.opts.StateDir)
+}
+
+func sharedDraftServerAt(t *testing.T, f *fixture, stateDir string) *fixture {
+	t.Helper()
 	peer := &fixture{t: t, root: f.root, wc: f.wc, id: f.id, opts: f.opts}
+	peer.opts.StateDir = stateDir
 	peer.opts.Origin = "http://127.0.0.1:39812"
 	peer.restart()
 	t.Cleanup(func() {

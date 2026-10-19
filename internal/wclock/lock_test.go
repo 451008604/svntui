@@ -23,6 +23,8 @@ func TestAcquireSerializesAliasesAndReleases(t *testing.T) {
 	}
 	if _, err := Acquire(lockDir, alias, "second"); !errors.Is(err, ErrBusy) {
 		t.Fatalf("alias lock error = %v, want ErrBusy", err)
+	} else if err.Error() != ErrBusy.Error()+": "+alias {
+		t.Fatalf("existing working-copy busy diagnostic changed: %v", err)
 	}
 	if err := first.Release(); err != nil {
 		t.Fatal(err)

@@ -22,7 +22,23 @@ func Acquire(lockDir, workingCopy, operation string) (*Lock, error) {
 	if err != nil {
 		return nil, err
 	}
-	sum := sha256.Sum256([]byte(platformPathKey(absolute)))
+	lock, err := acquireKey(lockDir, platformPathKey(absolute), operation, absolute)
+	if errors.Is(err, ErrBusy) {
+		return nil, fmt.Errorf("%w: %s", ErrBusy, workingCopy)
+	}
+	return lock, err
+}
+
+// 在指定锁目录内按不透明键加锁，目录的不同路径别名共享同一个锁文件。
+func AcquireKey(lockDir, key, operation string) (*Lock, error) {
+	if key == "" {
+		return nil, errors.New("锁键不能为空")
+	}
+	return acquireKey(lockDir, key, operation, key)
+}
+
+func acquireKey(lockDir, key, operation, identity string) (*Lock, error) {
+	sum := sha256.Sum256([]byte(key))
 	name := hex.EncodeToString(sum[:16]) + ".lock"
 	if err := os.MkdirAll(lockDir, 0o700); err != nil {
 		return nil, fmt.Errorf("创建锁目录失败: %w", err)
@@ -36,7 +52,7 @@ func Acquire(lockDir, workingCopy, operation string) (*Lock, error) {
 	if err := lockFile(file); err != nil {
 		_ = file.Close()
 		if isLockBusy(err) {
-			return nil, fmt.Errorf("%w: %s", ErrBusy, workingCopy)
+			return nil, fmt.Errorf("%w: %s", ErrBusy, identity)
 		}
 		return nil, fmt.Errorf("锁定工作副本失败: %w", err)
 	}
@@ -50,7 +66,7 @@ func Acquire(lockDir, workingCopy, operation string) (*Lock, error) {
 		_ = file.Close()
 		return nil, fmt.Errorf("定位工作副本锁信息失败: %w", err)
 	}
-	if _, err := fmt.Fprintf(file, "%d\n%s\n%s\n%s\n", os.Getpid(), time.Now().UTC().Format(time.RFC3339), operation, absolute); err != nil {
+	if _, err := fmt.Fprintf(file, "%d\n%s\n%s\n%s\n", os.Getpid(), time.Now().UTC().Format(time.RFC3339), operation, identity); err != nil {
 		_ = unlockFile(file)
 		_ = file.Close()
 		return nil, fmt.Errorf("写入工作副本锁信息失败: %w", err)

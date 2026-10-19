@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"os"
 	"path/filepath"
 	"slices"
 	"time"
@@ -33,20 +32,12 @@ func (s *Server) draftPath(p Project) string {
 
 // 仅保护本地草稿事务；锁内不运行 SVN，也不获取配置或工作副本锁。
 func (s *Server) lockDraft(ctx context.Context, p Project) (*wclock.Lock, error) {
-	directory := filepath.Dir(s.draftPath(p))
-	if err := os.MkdirAll(directory, 0o700); err != nil {
-		return nil, err
-	}
-	// 先解析父目录，保证首次保存和目录别名使用相同的持久文件键。
-	directory, err := canonical(directory)
-	if err != nil {
-		return nil, err
-	}
-	path := filepath.Join(directory, filepath.Base(s.draftPath(p)))
+	// 锁文件名只取项目标识；状态目录的大小写、符号链接等别名由文件系统归一。
+	lockDir := filepath.Join(s.opts.StateDir, "web", "draft-locks")
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	for ctx.Err() == nil {
-		lock, err := wclock.Acquire(filepath.Join(filepath.Dir(directory), "draft-locks"), path, "draft")
+		lock, err := wclock.AcquireKey(lockDir, p.ID, "draft")
 		if !errors.Is(err, wclock.ErrBusy) {
 			return lock, err
 		}
