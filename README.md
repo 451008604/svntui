@@ -2,7 +2,9 @@
 
 `svntui` 是一个面向 Linux、macOS 和 Windows 终端的 SVN 客户端。它直接调用系统 `svn`，不会重新实现 SVN 协议，也不会保存 SVN 密码。界面、帮助和错误提示默认使用中文。
 
-当前版本：**0.2.0**。Go + 系统 SVN，TUI 与脚本命令共用操作服务。
+当前版本：**0.3.0**。Go + 系统 SVN，本地 Web、TUI 与脚本命令共用操作服务。
+
+浏览器客户端使用 `svntui web` 启动，支持本机项目切换、变更与 diff、提交、更新、还原、changelist、历史和基础冲突处理。详见 [Web 使用指南](docs/web.md)。
 
 - 九模块 TUI：Workspace、Repository、History、Branches、Conflicts、Automations、SafePoints、Operations、Projects。
 - 独立提交页、多行说明和外部编辑器、原生 changelist、筛选选择、命名项目与最近工作副本。
@@ -15,7 +17,7 @@
 - SafePoint：保存文本/属性 diff、二进制或新增文件副本、移动状态及选中的未版本化文件，并支持校验和恢复。
 - 系统原生配置目录、跨进程工作副本写锁和脱敏操作日志。
 
-详细操作见 [0.2 工作流指南](docs/workflows.md)。提交草稿在当前 TUI 会话内按项目保留；退出程序后不持久化。冲突按文本、属性、树类型展示，可调用外部工具后复查并显式标记解决；内置逐块合并及属性三方编辑器尚未提供。普通 SVN 补丁不能携带二进制内容，二进制备份使用 SafePoint。
+详细操作见 [日常工作流指南](docs/workflows.md)。提交草稿在当前 TUI 会话内按项目保留；Web 草稿在本机持久保存。冲突按文本、属性、树类型展示，TUI 可调用外部工具后复查并显式标记解决；内置逐块合并及属性三方编辑器尚未提供。普通 SVN 补丁不能携带二进制内容，二进制备份使用 SafePoint。
 
 ## 环境要求
 
@@ -26,13 +28,13 @@
 
 ## 下载与安装
 
-从 [v0.2.0 Release](https://github.com/451008604/svntui/releases/tag/v0.2.0) 下载对应平台的压缩包，解压即可使用，无需安装 Go。安装包包含程序、MIT 许可证及离线安装和使用说明；系统 SVN 需要单独安装。
+从 [v0.3.0 Release](https://github.com/451008604/svntui/releases/tag/v0.3.0) 下载对应平台的压缩包，解压即可使用，无需安装 Go。安装包包含程序、MIT 许可证及离线安装和使用说明；系统 SVN 需要单独安装。
 
 | 平台 | 安装包 |
 | --- | --- |
-| macOS Apple 芯片（arm64） | [svntui-v0.2.0-macos-arm64.tar.gz](https://github.com/451008604/svntui/releases/download/v0.2.0/svntui-v0.2.0-macos-arm64.tar.gz) |
-| Linux Intel/AMD 64 位（amd64） | [svntui-v0.2.0-linux-amd64.tar.gz](https://github.com/451008604/svntui/releases/download/v0.2.0/svntui-v0.2.0-linux-amd64.tar.gz) |
-| Windows Intel/AMD 64 位（amd64） | [svntui-v0.2.0-windows-amd64.zip](https://github.com/451008604/svntui/releases/download/v0.2.0/svntui-v0.2.0-windows-amd64.zip) |
+| macOS Apple 芯片（arm64） | [svntui-v0.3.0-macos-arm64.tar.gz](https://github.com/451008604/svntui/releases/download/v0.3.0/svntui-v0.3.0-macos-arm64.tar.gz) |
+| Linux Intel/AMD 64 位（amd64） | [svntui-v0.3.0-linux-amd64.tar.gz](https://github.com/451008604/svntui/releases/download/v0.3.0/svntui-v0.3.0-linux-amd64.tar.gz) |
+| Windows Intel/AMD 64 位（amd64） | [svntui-v0.3.0-windows-amd64.zip](https://github.com/451008604/svntui/releases/download/v0.3.0/svntui-v0.3.0-windows-amd64.zip) |
 
 按平台安装 SVN、配置 PATH、校验下载及升级/卸载步骤见 **[安装指南](docs/installation.md)**。Intel Mac、Linux ARM64 和 Windows ARM64 本次未提供原生预编译包，可按下节从源码构建。
 
@@ -54,7 +56,7 @@ svntui --help
 ```bash
 git clone https://github.com/451008604/svntui.git
 cd svntui
-git checkout v0.2.0
+git checkout v0.3.0
 ```
 
 Linux/macOS：
@@ -85,6 +87,15 @@ svntui
 ```bash
 svntui /path/to/working-copy
 ```
+
+## Web 操作
+
+```bash
+svntui web
+svntui web --no-open --port 17890 "/path/to/working-copy"
+```
+
+默认打开浏览器并只监听本机随机端口。在普通目录启动可直接添加已有 SVN 工作副本；不启动自动更新调度器。提交草稿在本机持久保存。关闭标签页不取消写操作，按终端 Ctrl-C 会等待正在执行的写操作完成再停止。详见 [Web 使用指南](docs/web.md)。
 
 ## TUI 操作
 

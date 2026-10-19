@@ -30,7 +30,7 @@ import (
 	"svntui/internal/wclock"
 )
 
-const version = "0.2.0"
+const version = "0.3.0"
 
 var errHelpDisplayed = errors.New("帮助信息已显示")
 
@@ -77,6 +77,8 @@ func runInternal(ctx context.Context, args []string, stdout, stderr io.Writer) e
 		return runTUI(ctx, env, nil)
 	}
 	switch args[0] {
+	case "web":
+		return runWeb(ctx, env, args[1:], stdout, stderr)
 	case "commit", "update", "add", "delete", "move", "revert", "cleanup", "lock", "unlock", "resolve", "switch", "merge":
 		return runWorkspaceAction(ctx, env, args[0], args[1:], stdout, stderr)
 	case "changelist":
@@ -1022,6 +1024,7 @@ func printHelp(writer io.Writer) {
 
 用法:
   svntui [--no-color] [工作副本]
+  svntui web [--port 0] [--no-open] [工作副本]
   svntui status [--remote] [工作副本]
   svntui <commit|add|delete|move|revert|cleanup|lock|unlock|resolve> --path 工作副本 --yes [选项] 目标...
   svntui <update|merge> --path 工作副本 [--apply --yes] [选项] [目标...]
@@ -1031,7 +1034,7 @@ func printHelp(writer io.Writer) {
   svntui externals <list|set|edit> [选项] [参数...]
   svntui patch <export|apply> [选项] [参数...]
   svntui project <list|add|remove|open> [选项] [参数...]
-  所有命令可追加 --json 输出稳定结果封装；选项须放在位置参数之前。
+  脚本命令可追加 --json 输出稳定结果封装；Web/TUI 不支持 --json；选项须放在位置参数之前。
   svntui diff [--working-copy 路径] [目标...]
   svntui repository <list|compare|checkout|export|mkdir|delete|move|copy>
   svntui history <log|blame|compare>
