@@ -248,3 +248,29 @@ describe("explicit literal deletion paths", () => {
     expect(singlePathTarget("  ")).toEqual([]);
   });
 });
+
+describe("draft content deduplication", () => {
+  it("does not write an untouched draft, but saves a return to original content behind an in-flight write", async () => {
+    const first = deferred<Draft>();
+    const initial: Draft = { targets: ["a"], message: "original", revision: 1 };
+    const save = vi
+      .fn()
+      .mockImplementationOnce(() => first.promise)
+      .mockImplementation(async (value: Draft) => ({
+        ...value,
+        revision: value.revision + 1,
+      }));
+    const queue = new DraftQueue(initial, save, () => {});
+    queue.update(initial);
+    await queue.flush();
+    expect(save).not.toHaveBeenCalled();
+    queue.update({ targets: ["a"], message: "edited" });
+    const running = queue.flush();
+    queue.update({ targets: ["a"], message: "original" });
+    first.resolve({ targets: ["a"], message: "edited", revision: 2 });
+    await running;
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(save.mock.calls[1][0]).toEqual({ ...initial, revision: 2 });
+    expect(queue.current.message).toBe("original");
+  });
+});

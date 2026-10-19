@@ -148,6 +148,7 @@ afterEach(async () => {
 describe("actual App project transition handlers", () => {
   it("keeps an operation on A when B is clicked while its draft flush is delayed", async () => {
     await mount(<AuthenticatedApp version="0.3.0" />);
+    await edit('textarea[aria-label="提交说明"]', "pending operation message");
     const save = deferred<Draft>();
     mockPut.mockImplementationOnce(() => save.promise);
     await click(button("还原"));
@@ -155,6 +156,8 @@ describe("actual App project transition handlers", () => {
       'button.project[title="/wc/b"]',
     )!;
     expect(projectB.disabled).toBe(true);
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+    expect(mockPut).toHaveBeenCalledOnce();
     await click(projectB);
     await act(async () => save.resolve({ ...draft(), revision: 1 }));
     const dialog = container.querySelector('[role="dialog"]')!;
@@ -364,5 +367,114 @@ describe("actual OperationDialog busy lifecycle", () => {
         started_at: "2026-10-19T00:00:00Z",
       }),
     );
+  });
+});
+
+describe("status failure does not trap project recovery", () => {
+  function failAStatus() {
+    const original = mockApi.getMockImplementation()!;
+    mockApi.mockImplementation((path, init) =>
+      path.startsWith("/projects/a/status")
+        ? Promise.reject(new Error("remote SVN unavailable"))
+        : original(path, init),
+    );
+  }
+  it.each(["untouched", "edited-and-saved"])(
+    "leaves unhealthy A for healthy B with %s draft",
+    async (kind) => {
+      failAStatus();
+      await mount(<AuthenticatedApp version="0.3.0" />);
+      if (kind === "edited-and-saved") {
+        const message = container.querySelector<HTMLTextAreaElement>(
+          'textarea[aria-label="提交说明"]',
+        )!;
+        expect(message.disabled).toBe(false);
+        await edit(
+          'textarea[aria-label="提交说明"]',
+          "preserve draft across outage",
+        );
+      }
+      await click(
+        container.querySelector<HTMLButtonElement>(
+          'button.project[title="/wc/b"]',
+        )!,
+      );
+      expect(
+        container.querySelector("button.project.active")?.getAttribute("title"),
+      ).toBe("/wc/b");
+      if (kind === "untouched") expect(mockPut).not.toHaveBeenCalled();
+      else
+        expect(mockPut).toHaveBeenCalledWith(
+          "/projects/a/draft",
+          expect.objectContaining({
+            targets: ["same.txt"],
+            message: "preserve draft across outage",
+          }),
+        );
+    },
+  );
+  it("can register and navigate to B when A status is unavailable", async () => {
+    failAStatus();
+    let registered = false;
+    const original = mockApi.getMockImplementation()!;
+    mockApi.mockImplementation((path, init) =>
+      path === "/projects"
+        ? Promise.resolve(registered ? [a, b] : [a])
+        : original(path, init),
+    );
+    mockPost.mockImplementation(async () => {
+      registered = true;
+      return b;
+    });
+    await mount(<AuthenticatedApp version="0.3.0" />);
+    await click(
+      container.querySelector<HTMLButtonElement>('[aria-label="添加项目"]')!,
+    );
+    await edit('[role="dialog"] input', "/wc/b");
+    await act(async () => {
+      container
+        .querySelector("form")!
+        .dispatchEvent(
+          new Event("submit", { bubbles: true, cancelable: true }),
+        );
+    });
+    expect(
+      container.querySelector("button.project.active")?.getAttribute("title"),
+    ).toBe("/wc/b");
+  });
+  it("allows cleanup preview entry without an unrelated remote status read", async () => {
+    failAStatus();
+    await mount(<AuthenticatedApp version="0.3.0" />);
+    await click(button("清理工作副本"));
+    expect(
+      container.querySelector('[role="dialog"]')?.getAttribute("aria-label"),
+    ).toContain("清理 · Project A");
+    await click(button("生成预览"));
+    expect(mockPost).toHaveBeenCalledWith(
+      "/projects/a/previews",
+      expect.objectContaining({ action: "cleanup", targets: [] }),
+    );
+  });
+  it("still blocks navigation on a genuine pending409 save when status also failed", async () => {
+    failAStatus();
+    await mount(<AuthenticatedApp version="0.3.0" />);
+    await edit('textarea[aria-label="提交说明"]', "keep this local message");
+    mockPut.mockRejectedValue(
+      new ApiError(409, "stale_draft", "save conflict"),
+    );
+    await click(
+      container.querySelector<HTMLButtonElement>(
+        'button.project[title="/wc/b"]',
+      )!,
+    );
+    expect(
+      container.querySelector("button.project.active")?.getAttribute("title"),
+    ).toBe("/wc/a");
+    expect(
+      container.querySelector<HTMLTextAreaElement>(
+        'textarea[aria-label="提交说明"]',
+      )?.value,
+    ).toBe("keep this local message");
+    expect(container.textContent).toContain("save conflict");
   });
 });

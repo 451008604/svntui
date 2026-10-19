@@ -101,14 +101,12 @@ export function WorkspacePage({
   useEffect(() => {
     registerFlush(project.id, async () => {
       clearTimeout(timer.current);
-      if (!selectionReady || !workspace || !queue.current)
-        throw new Error("草稿或工作副本状态尚未载入");
+      if (!draftReady || !queue.current) throw new Error("草稿尚未载入");
       queue.current.update({
         ...draftContent.current,
-        targets: reconcileSelection(
-          draftContent.current.targets,
-          workspace.entries,
-        ),
+        targets: workspace
+          ? reconcileSelection(draftContent.current.targets, workspace.entries)
+          : draftContent.current.targets,
       });
       try {
         await queue.current.flush();
@@ -118,12 +116,14 @@ export function WorkspacePage({
         throw e;
       }
     });
-  }, [selectionReady, workspace, registerFlush, project.id]);
+  }, [draftReady, workspace, registerFlush, project.id]);
   // 防抖只合并内容；DraftQueue 串行携带服务器 revision，错误保持可见。
   useEffect(() => {
-    if (!selectionReady || !workspace || !queue.current) return;
+    if (!draftReady || !queue.current) return;
     queue.current.update({
-      targets: reconcileSelection(selected, workspace.entries),
+      targets: workspace
+        ? reconcileSelection(selected, workspace.entries)
+        : selected,
       message,
     });
     clearTimeout(timer.current);
@@ -134,7 +134,7 @@ export function WorkspacePage({
         .catch(setDraftError);
     }, 550);
     return () => clearTimeout(timer.current);
-  }, [selected, message, selectionReady, workspace]);
+  }, [selected, message, draftReady, workspace]);
   useEffect(() => {
     if (!workspace || !draftReady) return;
     const previous = draftContent.current.targets;
@@ -150,7 +150,9 @@ export function WorkspacePage({
   const operation = (action: Operation["action"], targets = selected) =>
     onOperation({
       action,
-      targets: workspace ? reconcileSelection(targets, workspace.entries) : [],
+      targets: workspace
+        ? reconcileSelection(targets, workspace.entries)
+        : targets,
       message: action === "commit" ? message : undefined,
     });
   useEffect(() => {
@@ -504,7 +506,7 @@ export function WorkspacePage({
               aria-label="提交说明"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              disabled={!selectionReady || locked}
+              disabled={!draftReady || locked}
               placeholder="描述本次更改的目的…"
               rows={7}
             />

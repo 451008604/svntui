@@ -1914,3 +1914,27 @@ mark {
 .pane-resizer:focus:after {
   background: #409fa7;
 }
+.diff-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-top: 1px solid var(--border);
+  padding: 7px 11px;
+  flex-shrink: 0;
+  background: #fbfcfe;
+}
+.diff-pagination button {
+  font-size: 10px;
+  padding: 3px 7px;
+}
+.diff-pagination > div {
+  text-align: center;
+  color: #74899c;
+  font-size: 10px;
+}
+.diff-pagination small {
+  display: block;
+  color: #a0adbb;
+  font-size: 9px;
+}

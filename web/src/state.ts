@@ -39,6 +39,13 @@ export class DraftQueue {
     this.current = initial;
   }
   update(content: DraftContent) {
+    const same = (other: DraftContent) =>
+      other.message === content.message &&
+      other.targets.length === content.targets.length &&
+      other.targets.every((path, index) => path === content.targets[index]);
+    // 未修改的草稿无需写入；保存进行中仍保留用户回退到旧内容的意图。
+    if (this.pending ? same(this.pending) : !this.running && same(this.current))
+      return;
     this.pending = { targets: [...content.targets], message: content.message };
     this.changed("待保存");
   }
