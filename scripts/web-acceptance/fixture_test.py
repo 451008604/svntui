@@ -43,7 +43,7 @@ class HistorySeedToolTest(unittest.TestCase):
                             fixture.shutil, 'which', side_effect=lambda name: (
                                 available_mucc if name == 'svnmucc' else '/tools/' + name)) as which, patch.object(
                             builder, 'run') as run, patch.object(builder, 'svn'), patch.object(
-                            builder, 'commit') as commit:
+                            builder, 'commit') as commit, patch.object(builder, 'write'):
                         builder.prepare(revisions=2, large_bytes=0, mode='basic')
                     history_message = 'history 002 ordinary'
                     if platform == 'posix' and available_mucc:
