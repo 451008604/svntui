@@ -2,7 +2,9 @@ package web
 
 import (
 	"context"
+	"errors"
 	"net/http"
+	"os"
 	"path/filepath"
 	"slices"
 	"time"
@@ -11,6 +13,7 @@ import (
 	"svntui/internal/safepoint"
 	"svntui/internal/storage"
 	"svntui/internal/svn"
+	"svntui/internal/wclock"
 )
 
 type Draft struct {
@@ -27,25 +30,61 @@ type storedDraft struct {
 func (s *Server) draftPath(p Project) string {
 	return filepath.Join(s.opts.StateDir, "web", "drafts", p.ID+".json")
 }
-func (s *Server) loadDraft(ctx context.Context, p Project) (storedDraft, error) {
-	info, err := s.opts.Client.Info(ctx, p.Path)
-	if err != nil {
-		return storedDraft{}, err
+
+// 仅保护本地草稿事务；锁内不运行 SVN，也不获取配置或工作副本锁。
+func (s *Server) lockDraft(ctx context.Context, p Project) (*wclock.Lock, error) {
+	directory := filepath.Dir(s.draftPath(p))
+	if err := os.MkdirAll(directory, 0o700); err != nil {
+		return nil, err
 	}
+	// 先解析父目录，保证首次保存和目录别名使用相同的持久文件键。
+	directory, err := canonical(directory)
+	if err != nil {
+		return nil, err
+	}
+	path := filepath.Join(directory, filepath.Base(s.draftPath(p)))
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	for ctx.Err() == nil {
+		lock, err := wclock.Acquire(filepath.Join(filepath.Dir(directory), "draft-locks"), path, "draft")
+		if !errors.Is(err, wclock.ErrBusy) {
+			return lock, err
+		}
+		timer := time.NewTimer(10 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+		case <-timer.C:
+		}
+	}
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return nil, problem(409, "draft_busy", "草稿正在保存，请重试")
+	}
+	return nil, ctx.Err()
+}
+
+func (s *Server) loadDraft(p Project, identity string) (storedDraft, error) {
 	draft := storedDraft{Draft: Draft{Targets: []string{}}}
 	if err := storage.LoadJSON(s.draftPath(p), &draft); err != nil {
 		return draft, err
 	}
-	if draft.ProjectID != p.ID || draft.Identity != infoIdentity(info) {
-		draft = storedDraft{Draft: Draft{Targets: []string{}}, ProjectID: p.ID, Identity: infoIdentity(info)}
+	if draft.ProjectID != p.ID || draft.Identity != identity {
+		draft = storedDraft{Draft: Draft{Targets: []string{}}, ProjectID: p.ID, Identity: identity}
 	}
 	return draft, nil
 }
 func (s *Server) getDraft(w http.ResponseWriter, r *http.Request) {
 	s.withProject(w, r, func(ctx context.Context, p Project) (any, error) {
-		s.draftMu.Lock()
-		defer s.draftMu.Unlock()
-		draft, err := s.loadDraft(ctx, p)
+		info, err := s.opts.Client.Info(ctx, p.Path)
+		if err != nil {
+			return nil, err
+		}
+		lock, err := s.lockDraft(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+		draft, err := s.loadDraft(p, infoIdentity(info))
+		_ = lock.Release()
 		if err != nil {
 			return nil, err
 		}
@@ -85,9 +124,17 @@ func (s *Server) putDraft(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return nil, err
 		}
-		s.draftMu.Lock()
-		defer s.draftMu.Unlock()
-		current, err := s.loadDraft(ctx, p)
+		info, err := s.opts.Client.Info(ctx, p.Path)
+		if err != nil {
+			return nil, err
+		}
+		lock, err := s.lockDraft(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+		defer lock.Release()
+		// 读取、比较版本和原子替换必须处于同一个跨进程事务。
+		current, err := s.loadDraft(p, infoIdentity(info))
 		if err != nil {
 			return nil, err
 		}
@@ -104,8 +151,12 @@ func (s *Server) putDraft(w http.ResponseWriter, r *http.Request) {
 
 // 持久保存空草稿和新版本，防止已发送的旧自动保存重新填回提交内容。
 func (s *Server) clearDraft(p Project, identity string) error {
-	s.draftMu.Lock()
-	defer s.draftMu.Unlock()
+	// SVN 执行已释放共享工作副本锁，再等待短时草稿事务完成。
+	lock, err := s.lockDraft(context.Background(), p)
+	if err != nil {
+		return err
+	}
+	defer lock.Release()
 	// 提交结果已确认仓库身份，清除草稿不再依赖可能失败的后续 SVN 读取。
 	current := storedDraft{}
 	if err := storage.LoadJSON(s.draftPath(p), &current); err != nil {

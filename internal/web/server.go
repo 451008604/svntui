@@ -59,7 +59,6 @@ type Server struct {
 	active      map[string]string
 	subscribers map[chan Job]struct{}
 	writes      sync.WaitGroup
-	draftMu     sync.Mutex
 }
 
 func New(opts Options) (*Server, error) {

@@ -3,7 +3,7 @@
 const fs=require('node:fs/promises');
 const path=require('node:path');
 const {execFile}=require('node:child_process');
-const {browserSession,saveUI,redactMessage,evidenceDirectory}=require('./browser-helpers.cjs');
+const {browserSession,saveUI,redactMessage,evidenceDirectory,projectButton}=require('./browser-helpers.cjs');
 const manifestPath=process.env.SVNTUI_FIXTURE_MANIFEST;
 function gate(){let signal;const item={seen:false,promise:new Promise(r=>{signal=r;})};item.resolve=()=>{item.seen=true;signal();};return item;}
 async function until(fn,message,timeout=20000){const end=Date.now()+timeout;while(Date.now()<end){if(await fn())return;await new Promise(r=>setTimeout(r,100));}throw new Error(message);}
@@ -22,7 +22,7 @@ function native(request){return new Promise((resolve,reject)=>{const child=execF
     const draftURL='/api/v1/projects/'+a.id+'/draft';
     const identity=()=>page.locator('.project-identity strong');
     const targets=()=>page.locator('.selected-targets code');
-    async function choose(project){for(const button of await page.locator('nav.projects button').all())if(normalize(await button.getAttribute('title'))===normalize(project.path)){await button.click();break;}
+    async function choose(project){await projectButton(page,project).click();
       await until(async()=>(await identity().textContent())===project.name,'selected project identity');
       await until(async()=>await page.getByLabel('提交说明',{exact:true}).isEnabled(),'draft ready');}
     async function select(file){await page.getByRole('button',{name:'取消选择',exact:true}).click();await page.getByRole('checkbox',{name:'选择 '+file,exact:true}).check();}
@@ -42,8 +42,8 @@ function native(request){return new Promise((resolve,reject)=>{const child=execF
       await page.getByLabel('提交说明',{exact:true}).fill('scope pending draft');
       await page.getByRole('button',{name:'还原',exact:true}).click();await until(async()=>captured.seen,'delayed request reached');
       let navigationBlocked=false;
-      for(const button of await page.locator('nav.projects button').all())if(normalize(await button.getAttribute('title'))===normalize(b.path)){
-        navigationBlocked=!(await button.isEnabled());if(!navigationBlocked)await button.click();break;}
+      const destination=projectButton(page,b);
+      navigationBlocked=!(await destination.isEnabled());if(!navigationBlocked)await destination.click();
       release.resolve();
       await until(async()=>await page.getByRole('dialog',{name:/^还原 · /}).isVisible()||(await identity().textContent())===b.name,'settled operation or transition');
       const modal=page.getByRole('dialog',{name:/^还原 · /});

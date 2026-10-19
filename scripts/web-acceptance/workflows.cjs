@@ -3,7 +3,7 @@
 const fs=require('node:fs/promises');
 const path=require('node:path');
 const {execFile}=require('node:child_process');
-const {browserSession,saveUI,waitJob,evidenceDirectory}=require('./browser-helpers.cjs');
+const {browserSession,saveUI,waitJob,evidenceDirectory,projectButton}=require('./browser-helpers.cjs');
 const manifestPath=process.env.SVNTUI_FIXTURE_MANIFEST;
 const uiNames={commit:'提交',add:'添加到版本控制',delete:'删除',move:'移动 / 重命名',revert:'还原',update:'更新',changelist:'变更分组',resolve:'解决冲突',cleanup:'清理',restore:'恢复 SafePoint'};
 const acceptNames={working:'使用已整理的工作文件',base:'使用基础版本','mine-full':'使用完整本地版本','theirs-full':'使用完整远端版本'};
@@ -215,9 +215,12 @@ async function readAPI(page,route){return page.evaluate(async route=>{
         await until(async()=>(await page.locator('.project-identity strong').textContent())==='浏览器 Peer','peer selected');
         if(!(await page.locator('details.project-menu').evaluate(el=>el.open)))await page.getByLabel('项目操作',{exact:true}).click();await buttons('移除项目登记').click();
         await page.getByRole('dialog',{name:'移除项目登记',exact:true}).getByRole('button',{name:'移除登记',exact:true}).click();
-        await until(async()=>(await readAPI(page,'/projects')).every(p=>normalized(p.path)!==normalized(manifest.peer)),'peer registration removed');
+        const remaining=await until(async()=>{const list=await readAPI(page,'/projects');return list.every(p=>normalized(p.path)!==normalized(manifest.peer))&&list;},'peer registration removed');
+        project=remaining.find(p=>normalized(p.path)===normalized(manifest.wc));assert.ok(project,'main WC still registered');
+        await until(async()=>await page.locator('nav.projects button').count()===remaining.length,'post-removal project DOM');
         assert.equal((await fs.stat(path.join(manifest.peer,'.svn'))).isDirectory(),true);
-        for(const button of await page.locator('nav.projects button').all())if(normalized(await button.getAttribute('title'))===normalized(manifest.wc)){await button.click();break;}
+        await projectButton(page,project).click();
+        await until(async()=>(await page.locator('.project-identity .path').getAttribute('title'))===project.path,'remaining project selected');
         await workspace();return {peer_retained:true};});
       await step('changelist-add-and-remove',async()=>{
         await select(['unselected.txt']);await operate('changelist',{changelist:'Web UI 分组'});

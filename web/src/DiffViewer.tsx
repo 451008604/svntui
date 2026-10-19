@@ -22,6 +22,7 @@ export function DiffViewer({
   );
   const [search, setSearch] = useState(""),
     [match, setMatch] = useState(0),
+    [revealRequest, setRevealRequest] = useState(0),
     [page, setPage] = useState(0);
   const lines = useMemo(() => parseDiff(text), [text]);
   // 对整份输入建立一次索引；渲染只读取当前页，不创建隐藏的全文件 DOM。
@@ -62,12 +63,17 @@ export function DiffViewer({
     if (source === undefined) return;
     const row = mode === "unified" ? source : split.displayRowBySource[source];
     setPage(Math.floor(row / ROWS_PER_PAGE));
-  }, [source, mode, split, search, title]);
+  }, [source, mode, split, search, title, revealRequest]);
   useEffect(() => {
     root.current
       ?.querySelector(`[data-line="${source}"]`)
       ?.scrollIntoView({ block: "nearest" });
-  }, [source, currentPage, mode, text, search, title]);
+  }, [source, currentPage, mode, text, search, title, revealRequest]);
+  const navigateMatch = (index: number) => {
+    setMatch(index);
+    // 单个命中绕回自身时，也重新分页定位并滚动到实际源行。
+    setRevealRequest((request) => request + 1);
+  };
   const content = (value: string) => {
     if (!search) return value;
     const at = value.toLowerCase().indexOf(search.toLowerCase());
@@ -138,7 +144,7 @@ export function DiffViewer({
               aria-label="上一个匹配"
               disabled={!matches.length}
               onClick={() =>
-                setMatch((activeMatch - 1 + matches.length) % matches.length)
+                navigateMatch((activeMatch - 1 + matches.length) % matches.length)
               }
             >
               ↑
@@ -146,7 +152,7 @@ export function DiffViewer({
             <button
               aria-label="下一个匹配"
               disabled={!matches.length}
-              onClick={() => setMatch((activeMatch + 1) % matches.length)}
+              onClick={() => navigateMatch((activeMatch + 1) % matches.length)}
             >
               ↓
             </button>

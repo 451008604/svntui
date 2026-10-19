@@ -109,6 +109,27 @@ describe("mounted bounded complete-diff rendering", () => {
       expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
     },
   );
+  it.each(["unified", "split"])(
+    "reveals the same unique match again after manual paging or scrolling: %s",
+    async (mode) => {
+      localStorage.setItem("diff-mode", mode);
+      await mount(<DiffViewer title="big.txt" text={bigText} />);
+      await search("context-4205");
+      expect(pagination()).toContain("第 5/5 页");
+      expect(container.querySelector('[aria-label="差异搜索匹配数"]')?.textContent).toBe("1/1");
+      for (const direction of ["下一个匹配", "上一个匹配"]) {
+        await click(button("上一页差异"));
+        expect(pagination()).toContain("第 4/5 页");
+        expect(container.querySelector(".match")).toBeNull();
+        await click(button(direction));
+        expect(pagination()).toContain("第 5/5 页");
+        expect(container.querySelector(".match code")?.textContent).toContain("context-4205");
+        vi.mocked(Element.prototype.scrollIntoView).mockClear();
+        await click(button(direction));
+        expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+      }
+    },
+  );
   it("uses display-row mapping when deletion and addition source indices share split rows", async () => {
     localStorage.setItem("diff-mode", "split");
     const text = [

@@ -118,4 +118,9 @@ async function waitJob(page, jobId, timeout=30000) {
   throw new Error('job did not finish within deadline');
 }
 
-module.exports = {browserSession, inspectUI, saveUI, waitJob, safeBase, redactMessage, evidenceDirectory};
+// Exact API-returned canonical path keeps the locator stable while project rows change.
+function projectButton(page, project) {
+  return page.locator('nav.projects button').and(page.getByTitle(project.path,{exact:true}));
+}
+
+module.exports = {projectButton,browserSession, inspectUI, saveUI, waitJob, safeBase, redactMessage, evidenceDirectory};
