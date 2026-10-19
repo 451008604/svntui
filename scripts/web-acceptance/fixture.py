@@ -152,7 +152,7 @@ def verify(manifest):
     entries = {}
     for node in ET.fromstring(raw).findall('.//entry'):
         status = node.find('wc-status')
-        rel = str(Path(node.attrib['path']).relative_to(wc))
+        rel = Path(node.attrib['path']).relative_to(wc).as_posix()
         entries[rel] = dict(status.attrib)
     def check(condition, message):
         if not condition:
@@ -172,7 +172,7 @@ def verify(manifest):
     else:
         check(not conflicts, 'basic mode must have zero SVN conflicts')
         check(not (wc / 'large.txt').exists() if not manifest['large_bytes'] else True, 'large diff must be omitted')
-    changelists = {node.attrib['name']: [str(Path(e.attrib['path']).relative_to(wc)) for e in node.findall('entry')]
+    changelists = {node.attrib['name']: [Path(e.attrib['path']).relative_to(wc).as_posix() for e in node.findall('entry')]
                   for node in ET.fromstring(raw).findall('changelist')}
     check(set(changelists[manifest['changelist']]) == {'selected.txt', 'space name.txt'}, 'changelist paths')
     logs = ET.fromstring(subprocess.check_output(['svn', 'log', '--xml', '--limit', '1000', manifest['repo_url'],

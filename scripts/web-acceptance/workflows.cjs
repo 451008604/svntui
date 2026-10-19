@@ -71,6 +71,7 @@ async function readAPI(page,route){return page.evaluate(async route=>{
         await until(async()=>JSON.stringify(await page.locator('.selected-targets code').allTextContents())===JSON.stringify(files),'exact selected paths');}
       function operationDialog(action){return page.getByRole('dialog',{name:new RegExp('^'+uiNames[action]+' · ')});}
       async function openOperation(action,options={}){
+        if(action!=='resolve')await until(async()=>await page.getByLabel('提交说明',{exact:true}).isEnabled(),'workspace draft ready before operation');
         if(options.open){await options.open();}
         else if(action==='commit')await page.getByRole('button',{name:/^预览提交/}).click();
         else if(action==='cleanup'){if(!(await page.locator('details.project-menu').evaluate(el=>el.open)))await page.getByLabel('项目操作',{exact:true}).click();await buttons('清理工作副本').click();}
@@ -213,12 +214,19 @@ async function readAPI(page,route){return page.evaluate(async route=>{
         await dialog.getByLabel('工作副本路径',{exact:true}).fill(manifest.peer);await dialog.getByLabel('项目名称（可选）',{exact:true}).fill('浏览器 Peer');
         await dialog.getByRole('button',{name:'验证并添加',exact:true}).click();await until(async()=>!(await dialog.isVisible()),'project added');
         await until(async()=>(await page.locator('.project-identity strong').textContent())==='浏览器 Peer','peer selected');
+        await until(async()=>await page.getByLabel('提交说明',{exact:true}).isEnabled(),'peer draft ready before removal');
         if(!(await page.locator('details.project-menu').evaluate(el=>el.open)))await page.getByLabel('项目操作',{exact:true}).click();await buttons('移除项目登记').click();
-        await page.getByRole('dialog',{name:'移除项目登记',exact:true}).getByRole('button',{name:'移除登记',exact:true}).click();
+        const peer=(await readAPI(page,'/projects')).find(p=>normalized(p.path)===normalized(manifest.peer));assert.ok(peer);
+        const [removed]=await Promise.all([
+          page.waitForResponse(r=>new URL(r.url()).pathname==='/api/v1/projects/'+peer.id&&r.request().method()==='DELETE'),
+          page.getByRole('dialog',{name:'移除项目登记',exact:true}).getByRole('button',{name:'移除登记',exact:true}).click(),
+        ]);
+        assert.equal(removed.status(),200);assert.equal((await removed.json()).ok,true);
         const remaining=await until(async()=>{const list=await readAPI(page,'/projects');return list.every(p=>normalized(p.path)!==normalized(manifest.peer))&&list;},'peer registration removed');
         project=remaining.find(p=>normalized(p.path)===normalized(manifest.wc));assert.ok(project,'main WC still registered');
         await until(async()=>await page.locator('nav.projects button').count()===remaining.length,'post-removal project DOM');
         assert.equal((await fs.stat(path.join(manifest.peer,'.svn'))).isDirectory(),true);
+        await until(async()=>await page.getByLabel('提交说明',{exact:true}).isEnabled(),'remaining project draft ready before selection');
         await projectButton(page,project).click();
         await until(async()=>(await page.locator('.project-identity .path').getAttribute('title'))===project.path,'remaining project selected');
         await workspace();return {peer_retained:true};});

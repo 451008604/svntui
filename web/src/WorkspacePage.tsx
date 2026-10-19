@@ -552,7 +552,7 @@ export function WorkspacePage({
             }
           >
             <Icon name="check" />
-            预览提交 <kbd>⌘ ↵</kbd>
+            预览提交 <kbd>⌘/Ctrl ↵</kbd>
           </Button>
         </footer>
       </aside>

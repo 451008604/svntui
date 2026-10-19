@@ -94,7 +94,7 @@ def main():
             file=target(request['path'],peer)
             existed=file.exists()
             file.parent.mkdir(parents=True,exist_ok=True)
-            file.write_text(request['text'],encoding='utf-8')
+            file.write_bytes(request['text'].encode('utf-8'))
             if not existed:
                 svn('add',str(file)+'@')
             svn('commit','--message',request['message'],'--username','browser-peer',str(file)+'@')

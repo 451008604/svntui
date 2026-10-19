@@ -232,6 +232,10 @@ func safeTarget(root, target string) (string, error) {
 		if strings.EqualFold(part, ".svn") {
 			return "", problem(403, "invalid_path", "禁止访问 SVN 元数据")
 		}
+		// 显式拒绝含扩展名的设备别名，避免 Go/Windows 版本改变 IsLocal 的判定。
+		if os.PathSeparator == '\\' && windowsDeviceComponent(part) {
+			return "", problem(400, "invalid_path", "禁止使用 Windows 设备名称")
+		}
 		current = filepath.Join(current, part)
 		info, err := os.Lstat(current)
 		if errors.Is(err, os.ErrNotExist) {
@@ -250,6 +254,23 @@ func safeTarget(root, target string) (string, error) {
 		}
 	}
 	return filepath.ToSlash(target), nil
+}
+
+// 只识别 Windows 设备组件；其余平台保留同名普通文件的合法性。
+func windowsDeviceComponent(part string) bool {
+	base, _, _ := strings.Cut(part, ".")
+	base, _, _ = strings.Cut(base, ":")
+	base = strings.TrimRight(base, " ")
+	for _, name := range []string{"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"} {
+		if strings.EqualFold(base, name) {
+			return true
+		}
+	}
+	if len(base) < 4 || (!strings.EqualFold(base[:3], "COM") && !strings.EqualFold(base[:3], "LPT")) {
+		return false
+	}
+	suffix := base[3:]
+	return len(suffix) == 1 && suffix[0] >= '1' && suffix[0] <= '9' || suffix == "¹" || suffix == "²" || suffix == "³"
 }
 
 // API 与持久化路径统一使用斜杠，只有进入本地路径 API 时才使用原生分隔符。

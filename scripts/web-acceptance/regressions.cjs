@@ -22,7 +22,9 @@ function native(request){return new Promise((resolve,reject)=>{const child=execF
     const draftURL='/api/v1/projects/'+a.id+'/draft';
     const identity=()=>page.locator('.project-identity strong');
     const targets=()=>page.locator('.selected-targets code');
-    async function choose(project){await projectButton(page,project).click();
+    async function choose(project){
+      await until(async()=>await page.getByLabel('提交说明',{exact:true}).isEnabled(),'origin draft ready before navigation');
+      await projectButton(page,project).click();
       await until(async()=>(await identity().textContent())===project.name,'selected project identity');
       await until(async()=>await page.getByLabel('提交说明',{exact:true}).isEnabled(),'draft ready');}
     async function select(file){await page.getByRole('button',{name:'取消选择',exact:true}).click();await page.getByRole('checkbox',{name:'选择 '+file,exact:true}).check();}
@@ -30,10 +32,13 @@ function native(request){return new Promise((resolve,reject)=>{const child=execF
       await until(async()=>(await page.getByRole('status').textContent()).includes('已保存'),'saved status');}
     async function registerPeer({allowRemain=false}={}){await page.getByLabel('添加项目',{exact:true}).click();const modal=page.getByRole('dialog',{name:'添加本地工作副本',exact:true});
       await modal.getByLabel('工作副本路径',{exact:true}).fill(manifest.peer);await modal.getByLabel('项目名称（可选）',{exact:true}).fill('回归项目 B');
-      const posted=page.waitForResponse(r=>r.url().endsWith('/api/v1/projects')&&r.request().method()==='POST');
-      await modal.getByRole('button',{name:'验证并添加',exact:true}).click();assert.ok([200,201].includes((await posted).status()));
+      const [posted]=await Promise.all([page.waitForResponse(r=>r.url().endsWith('/api/v1/projects')&&r.request().method()==='POST'),
+        modal.getByRole('button',{name:'验证并添加',exact:true}).click()]);assert.ok([200,201].includes(posted.status()));
       if(!allowRemain)await until(async()=>!(await modal.isVisible()),'registration modal closed');
-      const b=(await read('/projects')).find(p=>normalize(p.path)===normalize(manifest.peer));assert.ok(b);return b;}
+      const b=(await read('/projects')).find(p=>normalize(p.path)===normalize(manifest.peer));assert.ok(b);
+      if(!allowRemain){await until(async()=>(await identity().textContent())===b.name,'registered peer selected');
+        await until(async()=>await page.getByLabel('提交说明',{exact:true}).isEnabled(),'registered peer draft ready');}
+      return b;}
     await choose(a);await until(async()=>(await page.getByRole('status').textContent()).includes('已保存'),'initial settled draft');
     if(phase==='scope'){
       const b=await registerPeer();await choose(a);await select('selected.txt');await page.getByLabel('提交说明',{exact:true}).fill('scope saved baseline');await saved('selected.txt','scope saved baseline');

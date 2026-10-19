@@ -34,16 +34,26 @@ func TestAcquireKeyScopesIdentityToNamespace(t *testing.T) {
 	if err != nil || len(entries) != 2 {
 		t.Fatalf("unexpected namespace entries: %v / %v", entries, err)
 	}
-	metadata, err := os.ReadFile(filepath.Join(directory, entries[0].Name()))
-	if err != nil || !strings.Contains(string(metadata), "project-id\n") {
-		t.Fatalf("missing opaque identity metadata: %q / %v", metadata, err)
+	// Windows 的排他字节锁也拒绝第二个读取句柄，释放后检查同一文件的元数据。
+	metadataPath := first.file.Name()
+	if err := first.Release(); err != nil {
+		t.Fatal(err)
 	}
-	_ = first.Release()
+	metadata, err := os.ReadFile(metadataPath)
+	if err != nil {
+		t.Fatalf("read released lock metadata: %v", err)
+	}
+	fields := strings.Split(strings.TrimSuffix(string(metadata), "\n"), "\n")
+	if len(fields) != 4 || fields[2] != "first" || fields[3] != "opaque-project-id" {
+		t.Fatalf("missing exact opaque identity metadata: %q", metadata)
+	}
 	again, err := AcquireKey(directory, "opaque-project-id", "after release")
 	if err != nil {
 		t.Fatal(err)
 	}
-	_ = again.Release()
+	if err := again.Release(); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestAcquireKeyUsesPhysicalNamespaceForAliases(t *testing.T) {
