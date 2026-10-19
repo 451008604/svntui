@@ -17,7 +17,6 @@ import (
 )
 
 const outputLimit = 1 << 20
-const cookieName = "svntui_session"
 
 type apiError struct {
 	Code    string `json:"code"`
@@ -156,7 +155,7 @@ func (s *Server) guard(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		cookie, err := r.Cookie(cookieName)
+		cookie, err := r.Cookie(s.cookieName)
 		if err != nil || !equalSecret(cookie.Value, s.session) {
 			s.fail(w, problem(401, "unauthorized", "请从启动链接建立会话"))
 			return
@@ -199,6 +198,6 @@ func (s *Server) bootstrap(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, problem(401, "unauthorized", "启动令牌无效或已使用"))
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: cookieName, Value: s.session, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode})
+	http.SetCookie(w, &http.Cookie{Name: s.cookieName, Value: s.session, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode})
 	s.reply(w, 200, s.sessionData())
 }

@@ -44,6 +44,7 @@ type Server struct {
 	origin      *url.URL
 	handler     http.Handler
 	startup     string
+	cookieName  string
 	session     string
 	csrf        string
 	reads       context.Context
@@ -108,8 +109,10 @@ func New(opts Options) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Cookie 不区分端口，按监听 Origin 派生名称，避免另一个 Web 实例覆盖会话。
+	cookieID := sha256.Sum256([]byte(opts.Origin))
 	reads, cancel := context.WithCancel(context.Background())
-	s := &Server{opts: opts, origin: origin, startup: startup, session: session, csrf: csrf, reads: reads, cancelReads: cancel, slots: make(chan struct{}, 4), previews: make(map[string]*frozenPreview), jobs: make(map[string]Job), active: make(map[string]string), subscribers: make(map[chan Job]struct{})}
+	s := &Server{opts: opts, origin: origin, startup: startup, cookieName: "svntui_session_" + hex.EncodeToString(cookieID[:12]), session: session, csrf: csrf, reads: reads, cancelReads: cancel, slots: make(chan struct{}, 4), previews: make(map[string]*frozenPreview), jobs: make(map[string]Job), active: make(map[string]string), subscribers: make(map[chan Job]struct{})}
 	s.actions = service.Actions{Client: opts.Client, SafePoints: opts.SafePoints, LockDir: opts.LockDir}
 	mux := http.NewServeMux()
 	s.routes(mux)
