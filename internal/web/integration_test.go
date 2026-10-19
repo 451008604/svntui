@@ -37,6 +37,15 @@ type fixture struct {
 	csrf, id       string
 }
 
+// file URL 的 Windows 驱动器前需要斜杠，确保原生跨平台回归使用同一仓库地址语义。
+func repositoryURL(path string) string {
+	path = filepath.ToSlash(path)
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	return (&url.URL{Scheme: "file", Path: path}).String()
+}
+
 func command(t *testing.T, dir, binary string, args ...string) string {
 	t.Helper()
 	cmd := exec.CommandContext(t.Context(), binary, args...)
@@ -57,8 +66,8 @@ func newFixture(t *testing.T) *fixture {
 	root := t.TempDir()
 	f := &fixture{t: t, root: root, repo: filepath.Join(root, "repo"), wc: filepath.Join(root, "wc")}
 	command(t, root, "svnadmin", "create", f.repo)
-	repositoryURL := (&url.URL{Scheme: "file", Path: filepath.ToSlash(f.repo)}).String()
-	command(t, root, "svn", "checkout", repositoryURL, f.wc)
+	repoURL := repositoryURL(f.repo)
+	command(t, root, "svn", "checkout", repoURL, f.wc)
 	f.write("a.txt", "base a\n")
 	f.write("b.txt", "base b\n")
 	command(t, f.wc, "svn", "add", "a.txt", "b.txt")
@@ -442,7 +451,7 @@ func TestConflictArtifactsResolveAndSafePointRestore(t *testing.T) {
 	}
 	// 另一个 WC 的快照不能通过当前项目列出或恢复。
 	peer := filepath.Join(f.root, "peer")
-	command(t, f.root, "svn", "checkout", (&url.URL{Scheme: "file", Path: filepath.ToSlash(f.repo)}).String(), peer)
+	command(t, f.root, "svn", "checkout", repositoryURL(f.repo), peer)
 	if err := os.WriteFile(filepath.Join(peer, "b.txt"), []byte("peer\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -531,7 +540,7 @@ func TestPropertyAndTreeConflictRestrictions(t *testing.T) {
 		t.Run(kind, func(t *testing.T) {
 			f := newFixture(t)
 			peer := filepath.Join(f.root, "peer")
-			command(t, f.root, "svn", "checkout", (&url.URL{Scheme: "file", Path: filepath.ToSlash(f.repo)}).String(), peer)
+			command(t, f.root, "svn", "checkout", repositoryURL(f.repo), peer)
 			if kind == "property" {
 				command(t, f.wc, "svn", "propset", "custom:conflict", "local", "a.txt")
 				command(t, peer, "svn", "propset", "custom:conflict", "remote", "a.txt")
@@ -559,7 +568,7 @@ func TestFailedCommitPreservesDraft(t *testing.T) {
 	preview := f.preview(PreviewRequest{Action: "commit", Targets: []string{"a.txt"}, Message: "retain on failure"})
 	// 远端提交不改变本地指纹，但会让实际提交因 out-of-date 失败。
 	peer := filepath.Join(f.root, "peer")
-	command(t, f.root, "svn", "checkout", (&url.URL{Scheme: "file", Path: filepath.ToSlash(f.repo)}).String(), peer)
+	command(t, f.root, "svn", "checkout", repositoryURL(f.repo), peer)
 	if err := os.WriteFile(filepath.Join(peer, "a.txt"), []byte("remote\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -689,6 +698,7 @@ func TestSSEJobDTOAndClose(t *testing.T) {
 
 func TestOutputLimitIsExplicitAndSpillRemoved(t *testing.T) {
 	f := newFixture(t)
+	f.opts.Client.MaxOutputBytes = 64 * 1024
 	var spill string
 	baseObserver := f.opts.Client.Observer
 	f.opts.Client.Observer = func(command svn.Command, result svn.Result, err error) {

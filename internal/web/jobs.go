@@ -162,14 +162,19 @@ func (s *Server) runJob(preview *frozenPreview) {
 	}
 	job.Summary = result.Summary
 	job.Output = result.Output
-	// 无论写入是否成功，都向 SVN 读取真实状态；刷新失败同样明确报告。
-	_, refreshErr := s.workspace(ctx, preview.project, false)
-	err = errors.Join(err, refreshErr)
-	if err == nil && preview.Action == "commit" {
-		if clearErr := s.clearDraft(ctx, preview.project); clearErr != nil {
-			err = fmt.Errorf("提交成功，但保存草稿清除状态失败: %w", clearErr)
+	// 提交、草稿持久化与状态刷新分别记录结果，刷新失败不能撤销已完成的提交。
+	mutationErr := err
+	var persistenceErr error
+	if mutationErr == nil && preview.Action == "commit" {
+		if clearErr := s.clearDraft(preview.project, preview.identity); clearErr != nil {
+			persistenceErr = fmt.Errorf("提交成功，但保存草稿清除状态失败: %w", clearErr)
 		}
 	}
+	_, refreshErr := s.workspace(ctx, preview.project, false)
+	if refreshErr != nil {
+		refreshErr = fmt.Errorf("操作后刷新工作副本状态失败: %w", refreshErr)
+	}
+	err = errors.Join(mutationErr, persistenceErr, refreshErr)
 	if len(job.Output) > outputLimit {
 		job.Output = job.Output[:outputLimit]
 		err = errors.Join(err, problem(413, "output_limit", "任务输出超过 1 MiB，已截断显示"))

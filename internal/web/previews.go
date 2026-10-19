@@ -3,7 +3,6 @@ package web
 import (
 	"context"
 	"net/http"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -37,6 +36,7 @@ type frozenPreview struct {
 	project     Project
 	request     domain.ActionRequest
 	input       PreviewRequest
+	identity    string
 	fingerprint string
 	jobID       string
 	ready       chan struct{}
@@ -90,7 +90,7 @@ func (s *Server) buildPreview(ctx context.Context, p Project, input PreviewReque
 		if len(targets) == 0 && input.Changelist != "" {
 			for _, e := range entries {
 				if e.Changelist == input.Changelist && e.IsVersionedDirty() {
-					targets = append(targets, e.Path)
+					targets = append(targets, apiPath(e.Path))
 				}
 			}
 		}
@@ -102,7 +102,7 @@ func (s *Server) buildPreview(ctx context.Context, p Project, input PreviewReque
 			return nil, err
 		}
 		for _, target := range targets {
-			index := slices.IndexFunc(entries, func(e svn.StatusEntry) bool { return filepath.Clean(e.Path) == target })
+			index := slices.IndexFunc(entries, func(e svn.StatusEntry) bool { return apiPath(e.Path) == target })
 			if index < 0 || !entries[index].IsVersionedDirty() || entries[index].IsConflict() || entries[index].Item == "missing" {
 				return nil, problem(409, "invalid_state", "所选路径当前不可提交: "+target)
 			}
@@ -140,7 +140,7 @@ func (s *Server) buildPreview(ctx context.Context, p Project, input PreviewReque
 			return nil, err
 		}
 		for _, target := range targets {
-			index := slices.IndexFunc(entries, func(e svn.StatusEntry) bool { return filepath.Clean(e.Path) == target })
+			index := slices.IndexFunc(entries, func(e svn.StatusEntry) bool { return apiPath(e.Path) == target })
 			if index < 0 || !entries[index].IsConflict() || !slices.Contains(accepts(entries[index]), accept) {
 				return nil, problem(400, "invalid_argument", "当前冲突不支持此解决方式: "+target)
 			}
@@ -177,6 +177,17 @@ func (s *Server) buildPreview(ctx context.Context, p Project, input PreviewReque
 		if err != nil {
 			return nil, problem(400, "invalid_argument", err.Error())
 		}
+	}
+	// 服务规范化可能产生原生分隔符；冻结与返回值再次统一为 API 路径。
+	for i, target := range request.Targets {
+		request.Targets[i] = apiPath(target)
+	}
+	if request.Action == domain.ActionMove {
+		request.Arguments = slices.Clone(request.Targets)
+	}
+	info, err := s.opts.Client.Info(ctx, p.Path)
+	if err != nil {
+		return nil, err
 	}
 	before, err := s.requestFingerprint(ctx, p, request)
 	if err != nil {
@@ -216,7 +227,7 @@ func (s *Server) buildPreview(ctx context.Context, p Project, input PreviewReque
 	if input.Action == "restore" {
 		summary = "SafePoint 恢复预览"
 	}
-	return &frozenPreview{Preview: Preview{ID: id, Action: input.Action, Targets: request.Targets, Summary: summary, Output: output, Risk: risk, ExpiresAt: time.Now().UTC().Add(10 * time.Minute)}, project: p, request: request, input: input, fingerprint: after}, nil
+	return &frozenPreview{Preview: Preview{ID: id, Action: input.Action, Targets: request.Targets, Summary: summary, Output: output, Risk: risk, ExpiresAt: time.Now().UTC().Add(10 * time.Minute)}, project: p, request: request, input: input, identity: infoIdentity(info), fingerprint: after}, nil
 }
 func validRevision(value string) bool {
 	if value == "HEAD" {

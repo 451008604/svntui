@@ -64,7 +64,7 @@ func (s *Server) diff(w http.ResponseWriter, r *http.Request) {
 			}
 			for _, target := range targets {
 				if !slices.ContainsFunc(entries, func(e svn.StatusEntry) bool {
-					return filepath.Clean(e.Path) == target && (e.Item == "unversioned" || e.Item == "ignored")
+					return apiPath(e.Path) == target && (e.Item == "unversioned" || e.Item == "ignored")
 				}) {
 					continue
 				}
@@ -77,12 +77,12 @@ func (s *Server) diff(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		text, err := s.actions.WorkspaceDiff(ctx, p.Path, targets)
+		text, err := s.actions.WorkspaceDiff(ctx, p.Path, nativeTargets(targets))
 		if err != nil {
 			return nil, err
 		}
-		if len(text) > outputLimit {
-			return nil, problem(413, "output_limit", "差异超过 1 MiB，请缩小选择范围")
+		if int64(len(text)) > s.opts.Client.MaxOutputBytes {
+			return nil, problem(413, "output_limit", "差异超过 SVN 输出上限，请缩小选择范围")
 		}
 		return struct {
 			Text string `json:"text"`
@@ -162,12 +162,12 @@ func (s *Server) historyDiff(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return nil, err
 		}
-		text, err := s.opts.Client.RevisionDiff(ctx, p.Path, target, revision)
+		text, err := s.opts.Client.RevisionDiff(ctx, p.Path, filepath.FromSlash(target), revision)
 		if err != nil {
 			return nil, err
 		}
-		if len(text) > outputLimit {
-			return nil, problem(413, "output_limit", fmt.Sprintf("r%d 差异超过 1 MiB", revision))
+		if int64(len(text)) > s.opts.Client.MaxOutputBytes {
+			return nil, problem(413, "output_limit", fmt.Sprintf("r%d 差异超过 SVN 输出上限", revision))
 		}
 		return struct {
 			Text string `json:"text"`

@@ -46,7 +46,9 @@ func (s *Server) reply(w http.ResponseWriter, status int, data any) {
 func errorInfo(err error) *apiError {
 	var p *apiError
 	if errors.As(err, &p) {
-		return p
+		copy := *p
+		copy.Message = err.Error()
+		return &copy
 	}
 	p = &apiError{Code: "internal", Message: err.Error(), status: 500, exit: 1}
 	var command *svn.CommandError

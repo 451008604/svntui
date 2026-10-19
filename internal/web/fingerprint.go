@@ -46,7 +46,7 @@ func (s *Server) requestFingerprint(ctx context.Context, p Project, request doma
 				relative, err := filepath.Rel(parent, entry.Path)
 				return err == nil && filepath.IsLocal(relative)
 			}) {
-				targets = append(targets, entry.Path)
+				targets = append(targets, apiPath(entry.Path))
 			}
 		}
 	}
@@ -78,7 +78,7 @@ func (s *Server) fingerprint(ctx context.Context, p Project, targets []string) (
 		}
 		args = append(args, "--")
 		for _, target := range scope {
-			args = append(args, svn.LiteralTarget(target))
+			args = append(args, svn.LiteralTarget(filepath.FromSlash(target)))
 		}
 		result, err := s.opts.Client.Run(ctx, p.Path, args...)
 		if err != nil {
@@ -89,7 +89,7 @@ func (s *Server) fingerprint(ctx context.Context, p Project, targets []string) (
 			return "", err
 		}
 		for _, entry := range statuses {
-			states[filepath.Clean(entry.Path)] = entry.Item
+			states[apiPath(entry.Path)] = entry.Item
 		}
 		// SVN XML 属性顺序并不固定，解析后排序才能产生稳定指纹。
 		slices.SortFunc(statuses, func(a, b svn.StatusEntry) int { return strings.Compare(a.Path, b.Path) })
@@ -116,7 +116,7 @@ func (s *Server) fingerprint(ctx context.Context, p Project, targets []string) (
 			return "", err
 		}
 		_, _ = h.Write(encoded)
-		result, err := s.opts.Client.Run(ctx, p.Path, "proplist", "--xml", "--verbose", "--recursive", "--", svn.LiteralTarget(target))
+		result, err := s.opts.Client.Run(ctx, p.Path, "proplist", "--xml", "--verbose", "--recursive", "--", svn.LiteralTarget(filepath.FromSlash(target)))
 		if err != nil {
 			return "", err
 		}

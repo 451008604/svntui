@@ -83,8 +83,8 @@ func New(opts Options) (*Server, error) {
 	if opts.Client.Binary == "" {
 		opts.Client.Binary = "svn"
 	}
-	if opts.Client.MaxOutputBytes <= 0 || opts.Client.MaxOutputBytes > outputLimit {
-		opts.Client.MaxOutputBytes = outputLimit
+	if opts.Client.MaxOutputBytes <= 0 || opts.Client.MaxOutputBytes > svn.DefaultMaxOutputBytes {
+		opts.Client.MaxOutputBytes = svn.DefaultMaxOutputBytes
 	}
 	// Web 只返回受限输出；SVN 溢出制品在观察器记录后及时清理。
 	observer := opts.Client.Observer

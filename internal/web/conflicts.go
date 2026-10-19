@@ -74,7 +74,8 @@ func artifact(root, path string) string {
 		}
 		path = relative
 	}
-	target, err := safeTarget(root, path)
+	// SVN 制品路径可能使用原生分隔符，验证前转换为稳定 API 路径。
+	target, err := safeTarget(root, filepath.ToSlash(path))
 	if err != nil {
 		return "[制品位于安全范围之外]"
 	}
@@ -91,7 +92,7 @@ func artifact(root, path string) string {
 		return "[无法打开工作副本]"
 	}
 	defer dir.Close()
-	file, err := dir.Open(target)
+	file, err := dir.Open(filepath.FromSlash(target))
 	if err != nil {
 		return "[制品不可用: " + err.Error() + "]"
 	}

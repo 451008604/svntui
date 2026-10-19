@@ -249,8 +249,19 @@ func safeTarget(root, target string) (string, error) {
 			return "", problem(403, "invalid_path", "目标父目录为符号链接，已拒绝穿越")
 		}
 	}
-	return target, nil
+	return filepath.ToSlash(target), nil
 }
+
+// API 与持久化路径统一使用斜杠，只有进入本地路径 API 时才使用原生分隔符。
+func apiPath(value string) string { return filepath.ToSlash(filepath.Clean(filepath.FromSlash(value))) }
+func nativeTargets(targets []string) []string {
+	result := make([]string, len(targets))
+	for i, target := range targets {
+		result[i] = filepath.FromSlash(target)
+	}
+	return result
+}
+
 func normalizeTargets(root string, targets []string) ([]string, error) {
 	if len(targets) > 1000 {
 		return nil, problem(400, "invalid_argument", "一次最多选择 1000 个路径")

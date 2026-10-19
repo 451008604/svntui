@@ -58,7 +58,7 @@ func (s *Server) getDraft(w http.ResponseWriter, r *http.Request) {
 			if _, err := safeTarget(p.Path, target); err != nil {
 				continue
 			}
-			if slices.ContainsFunc(entries, func(e svn.StatusEntry) bool { return filepath.Clean(e.Path) == filepath.Clean(target) }) {
+			if slices.ContainsFunc(entries, func(e svn.StatusEntry) bool { return apiPath(e.Path) == target }) {
 				selected = append(selected, target)
 			}
 		}
@@ -103,13 +103,16 @@ func (s *Server) putDraft(w http.ResponseWriter, r *http.Request) {
 }
 
 // 持久保存空草稿和新版本，防止已发送的旧自动保存重新填回提交内容。
-func (s *Server) clearDraft(ctx context.Context, p Project) error {
+func (s *Server) clearDraft(p Project, identity string) error {
 	s.draftMu.Lock()
 	defer s.draftMu.Unlock()
-	current, err := s.loadDraft(ctx, p)
-	if err != nil {
+	// 提交结果已确认仓库身份，清除草稿不再依赖可能失败的后续 SVN 读取。
+	current := storedDraft{}
+	if err := storage.LoadJSON(s.draftPath(p), &current); err != nil {
 		return err
 	}
+	current.ProjectID = p.ID
+	current.Identity = identity
 	current.Draft = Draft{Targets: []string{}, Revision: current.Revision + 1}
 	return storage.SaveJSON(s.draftPath(p), current)
 }
