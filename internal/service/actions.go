@@ -161,6 +161,11 @@ func formatNewFilePatch(data []byte) string {
 }
 
 func (a Actions) Execute(ctx context.Context, request domain.ActionRequest) (domain.ActionResult, error) {
+	return a.ExecuteWithPrecondition(ctx, request, nil)
+}
+
+// 在共享写锁内检查前置条件，避免确认与实际写入之间发生其他操作。
+func (a Actions) ExecuteWithPrecondition(ctx context.Context, request domain.ActionRequest, check func() error) (domain.ActionResult, error) {
 	// 确认与执行共用规范化目标，执行前再次校验。
 	request, err := a.NormalizeAction(request)
 	if err != nil {
@@ -181,6 +186,11 @@ func (a Actions) Execute(ctx context.Context, request domain.ActionRequest) (dom
 			return domain.ActionResult{}, err
 		}
 		defer lock.Release()
+	}
+	if check != nil {
+		if err := check(); err != nil {
+			return domain.ActionResult{}, err
+		}
 	}
 	result, summary, refresh, err := a.executeLocked(ctx, request)
 	output := strings.TrimSpace(result.Stdout)

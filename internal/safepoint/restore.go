@@ -110,6 +110,11 @@ func (m *Manager) validateEntryRevisions(ctx context.Context, workingCopy string
 func normalizeURL(value string) string { return strings.TrimRight(value, "/") }
 
 func (m *Manager) Restore(ctx context.Context, id, workingCopy string, options RestoreOptions) (RestoreResult, error) {
+	return m.RestoreWithPrecondition(ctx, id, workingCopy, options, nil)
+}
+
+// 在工作副本写锁内重新检查调用方的恢复前置条件。
+func (m *Manager) RestoreWithPrecondition(ctx context.Context, id, workingCopy string, options RestoreOptions, check func() error) (RestoreResult, error) {
 	rootInfo, err := m.client.Info(ctx, workingCopy)
 	if err != nil {
 		return RestoreResult{}, fmt.Errorf("读取恢复目标信息: %w", err)
@@ -123,6 +128,11 @@ func (m *Manager) Restore(ctx context.Context, id, workingCopy string, options R
 		return RestoreResult{}, err
 	}
 	defer workingCopyLock.Release()
+	if check != nil {
+		if err := check(); err != nil {
+			return RestoreResult{}, err
+		}
+	}
 	storeLock, err := m.acquireStoreLock("恢复")
 	if err != nil {
 		return RestoreResult{}, err
