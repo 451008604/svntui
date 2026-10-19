@@ -40,7 +40,7 @@ export default function App() {
     );
   return <AuthenticatedApp version={auth.version} />;
 }
-function AuthenticatedApp({ version }: { version: string }) {
+export function AuthenticatedApp({ version }: { version: string }) {
   const [projects, setProjects] = useState<Project[]>([]),
     [projectID, setProjectID] = useState(
       localStorage.getItem("project-id") || "",
@@ -53,13 +53,22 @@ function AuthenticatedApp({ version }: { version: string }) {
     [connected, setConnected] = useState(false),
     [register, setRegister] = useState(false),
     [drawer, setDrawer] = useState(false),
-    [operation, setOperation] = useState<Operation | null>(null),
+    [operation, setOperation] = useState<{
+      project: Project;
+      request: Operation;
+      flush: () => Promise<void>;
+    } | null>(null),
+    [settling, setSettling] = useState(false),
     [remove, setRemove] = useState(false),
     [commitEpoch, setCommitEpoch] = useState(0),
     [railWidth, setRailWidth] = useState(
       Number(localStorage.getItem("rail-width")) || 224,
     );
-  const flushRef = useRef<() => Promise<void>>(async () => {});
+  const flushRef = useRef<{
+    projectID: string;
+    flush: () => Promise<void>;
+  } | null>(null);
+  const transition = useRef<"navigation" | "operation" | null>(null);
   const currentID = useRef(projectID);
   currentID.current = projectID;
   const jobSnapshot = useRef<Job[]>([]);
@@ -68,8 +77,8 @@ function AuthenticatedApp({ version }: { version: string }) {
     (j) => j.project_id === projectID && j.state === "running",
   );
   const refreshAll = useCallback(() => setRefresh((v) => v + 1), []);
-  const registerFlush = useCallback((f: () => Promise<void>) => {
-    flushRef.current = f;
+  const registerFlush = useCallback((id: string, f: () => Promise<void>) => {
+    flushRef.current = { projectID: id, flush: f };
   }, []);
   const loadProjects = useCallback(async () => {
     try {
@@ -148,24 +157,61 @@ function AuthenticatedApp({ version }: { version: string }) {
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
   }, [refreshAll, reloadJobs]);
+  // 项目切换、登记后导航和操作准备共用同步守卫，避免跨 await 交错。
   const chooseProject = async (id: string) => {
+    if (transition.current) return;
+    if (project && currentID.current !== project.id) return;
+    if (id === currentID.current) {
+      setRegister(false);
+      return;
+    }
+    transition.current = "navigation";
+    setSettling(true);
+    const origin = project;
+    const save = flushRef.current;
     try {
-      if (project && id !== projectID) await flushRef.current();
+      if (origin) {
+        if (save?.projectID !== origin.id)
+          throw new Error("当前项目草稿尚未就绪");
+        await save.flush();
+      }
+      currentID.current = id;
       setProjectID(id);
       setPage("workspace");
       setDrawer(false);
-    } catch (e) {
-      setError(e);
+    } catch (error) {
+      setError(error);
+    } finally {
+      transition.current = null;
+      setSettling(false);
     }
   };
-  const beginOperation = async (o: Operation) => {
+  const beginOperation = async (request: Operation) => {
+    if (transition.current || !project || currentID.current !== project.id)
+      return;
+    const origin = { ...project };
+    const frozen = { ...request, targets: [...request.targets] };
+    const save = flushRef.current;
+    transition.current = "operation";
+    setSettling(true);
     setError(null);
     try {
-      await flushRef.current();
-      setOperation(o);
-    } catch (e) {
-      setError(e);
+      if (save?.projectID !== origin.id)
+        throw new Error("当前项目草稿尚未就绪");
+      await save.flush();
+      if (currentID.current !== origin.id)
+        throw new Error("项目已切换，请重新发起操作");
+      setOperation({ project: origin, request: frozen, flush: save.flush });
+    } catch (error) {
+      transition.current = null;
+      setError(error);
+    } finally {
+      setSettling(false);
     }
+  };
+  const closeOperation = () => {
+    setOperation(null);
+    transition.current = null;
   };
   const resizeRail = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -204,6 +250,7 @@ function AuthenticatedApp({ version }: { version: string }) {
             aria-label="添加项目"
             title="添加工作副本"
             onClick={() => setRegister(true)}
+            disabled={settling || !!operation}
           >
             <Icon name="plus" size={17} />
           </button>
@@ -214,6 +261,7 @@ function AuthenticatedApp({ version }: { version: string }) {
               className={`project ${projectID === p.id ? "active" : ""}`}
               key={p.id}
               onClick={() => chooseProject(p.id)}
+              disabled={settling || !!operation}
               title={p.path}
             >
               <Icon name="folder" />
@@ -360,7 +408,11 @@ function AuthenticatedApp({ version }: { version: string }) {
                 <br />
                 在执行前明确每个操作的范围。
               </p>
-              <Button primary onClick={() => setRegister(true)}>
+              <Button
+                primary
+                onClick={() => setRegister(true)}
+                disabled={settling || !!operation}
+              >
                 <Icon name="plus" />
                 添加本地工作副本
               </Button>
@@ -380,7 +432,7 @@ function AuthenticatedApp({ version }: { version: string }) {
                   commitEpoch={commitEpoch}
                   registerFlush={registerFlush}
                   onOperation={beginOperation}
-                  locked={active || operation?.action === "commit"}
+                  locked={active || settling || !!operation}
                 />
               </div>
               {page === "history" && (
@@ -417,9 +469,8 @@ function AuthenticatedApp({ version }: { version: string }) {
           onClose={() => setRegister(false)}
           onRegistered={(p) => {
             setProjects((prev) => [...prev.filter((x) => x.id !== p.id), p]);
-            setProjectID(p.id);
-            setPage("workspace");
             setRegister(false);
+            void chooseProject(p.id);
             refreshAll();
           }}
         />
@@ -438,7 +489,7 @@ function AuthenticatedApp({ version }: { version: string }) {
               primary
               onClick={async () => {
                 try {
-                  await flushRef.current();
+                  await flushRef.current?.flush();
                   await api(`/projects/${project.id}`, { method: "DELETE" });
                   setRemove(false);
                   refreshAll();
@@ -467,15 +518,16 @@ function AuthenticatedApp({ version }: { version: string }) {
           refresh={refresh}
         />
       )}{" "}
-      {operation && project && (
+      {operation && (
         <OperationDialog
-          project={project}
-          request={operation}
-          beforeCommit={() => flushRef.current()}
-          onClose={() => setOperation(null)}
+          key={operation.project.id}
+          project={operation.project}
+          request={operation.request}
+          beforeCommit={operation.flush}
+          onClose={closeOperation}
           onJob={(job) => {
             receive(job);
-            setOperation(null);
+            closeOperation();
             setDrawer(true);
           }}
         />

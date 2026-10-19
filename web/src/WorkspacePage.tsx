@@ -24,7 +24,7 @@ export function WorkspacePage({
   refresh: number;
   commitEpoch: number;
   onOperation: (o: Operation) => void;
-  registerFlush: (f: () => Promise<void>) => void;
+  registerFlush: (projectID: string, f: () => Promise<void>) => void;
   locked: boolean;
 }) {
   const {
@@ -96,12 +96,20 @@ export function WorkspacePage({
       queue.current?.flush().catch(() => {});
     };
   }, [project.id, commitEpoch, draftReload]);
+  const selectionReady = draftReady && !!workspace && !loading && !error;
   // 提交和切换项目前排空保存队列，确认前冻结提交面板。
   useEffect(() => {
-    registerFlush(async () => {
+    registerFlush(project.id, async () => {
       clearTimeout(timer.current);
-      if (!draftReady || !queue.current) throw new Error("草稿尚未载入");
-      queue.current.update(draftContent.current);
+      if (!selectionReady || !workspace || !queue.current)
+        throw new Error("草稿或工作副本状态尚未载入");
+      queue.current.update({
+        ...draftContent.current,
+        targets: reconcileSelection(
+          draftContent.current.targets,
+          workspace.entries,
+        ),
+      });
       try {
         await queue.current.flush();
         setDraftError(null);
@@ -110,11 +118,14 @@ export function WorkspacePage({
         throw e;
       }
     });
-  }, [draftReady, registerFlush]);
+  }, [selectionReady, workspace, registerFlush, project.id]);
   // 防抖只合并内容；DraftQueue 串行携带服务器 revision，错误保持可见。
   useEffect(() => {
-    if (!draftReady || !queue.current) return;
-    queue.current.update({ targets: selected, message });
+    if (!selectionReady || !workspace || !queue.current) return;
+    queue.current.update({
+      targets: reconcileSelection(selected, workspace.entries),
+      message,
+    });
     clearTimeout(timer.current);
     timer.current = setTimeout(() => {
       queue.current
@@ -123,9 +134,9 @@ export function WorkspacePage({
         .catch(setDraftError);
     }, 550);
     return () => clearTimeout(timer.current);
-  }, [selected, message, draftReady]);
+  }, [selected, message, selectionReady, workspace]);
   useEffect(() => {
-    if (!workspace) return;
+    if (!workspace || !draftReady) return;
     const previous = draftContent.current.targets;
     const next = reconcileSelection(previous, workspace.entries);
     setLost(previous.length - next.length);
@@ -135,11 +146,11 @@ export function WorkspacePage({
         ? prev
         : workspace.entries[0]?.path || "",
     );
-  }, [workspace]);
+  }, [workspace, draftReady]);
   const operation = (action: Operation["action"], targets = selected) =>
     onOperation({
       action,
-      targets,
+      targets: workspace ? reconcileSelection(targets, workspace.entries) : [],
       message: action === "commit" ? message : undefined,
     });
   useEffect(() => {
@@ -222,13 +233,13 @@ export function WorkspacePage({
                   ...new Set([...prev, ...visible.map((e) => e.path)]),
                 ])
               }
-              disabled={!draftReady || locked}
+              disabled={!selectionReady || locked}
             >
               选择可见项
             </button>
             <button
               onClick={() => setSelected([])}
-              disabled={!draftReady || locked}
+              disabled={!selectionReady || locked}
             >
               取消选择
             </button>
@@ -255,7 +266,7 @@ export function WorkspacePage({
                       <input
                         aria-label="选择全部可见路径"
                         type="checkbox"
-                        disabled={!draftReady || locked}
+                        disabled={!selectionReady || locked}
                         checked={
                           visible.length > 0 &&
                           visible.every((e) => selected.includes(e.path))
@@ -293,7 +304,7 @@ export function WorkspacePage({
                       onKeyDown={(e) => {
                         if (e.key === " ") {
                           e.preventDefault();
-                          if (draftReady && !locked)
+                          if (selectionReady && !locked)
                             choose(entry.path, !selected.includes(entry.path));
                         }
                         if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -313,7 +324,7 @@ export function WorkspacePage({
                           aria-label={`选择 ${entry.path}`}
                           type="checkbox"
                           checked={selected.includes(entry.path)}
-                          disabled={!draftReady || locked}
+                          disabled={!selectionReady || locked}
                           onClick={(e) => {
                             e.stopPropagation();
                             if (e.shiftKey && lastSelection.current !== null) {
@@ -493,7 +504,7 @@ export function WorkspacePage({
               aria-label="提交说明"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              disabled={!draftReady || locked}
+              disabled={!selectionReady || locked}
               placeholder="描述本次更改的目的…"
               rows={7}
             />
@@ -535,7 +546,7 @@ export function WorkspacePage({
             primary
             onClick={() => operation("commit")}
             disabled={
-              !draftReady || !selected.length || !message.trim() || locked
+              !selectionReady || !selected.length || !message.trim() || locked
             }
           >
             <Icon name="check" />

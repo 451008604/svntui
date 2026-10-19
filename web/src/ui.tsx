@@ -118,6 +118,8 @@ export function Modal({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const restore = useRef<Element | null>(null);
+  const close = useRef(onClose);
+  close.current = onClose;
   useEffect(() => {
     restore.current = document.activeElement;
     const el = ref.current!;
@@ -125,7 +127,7 @@ export function Modal({
     const key = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
-        onClose();
+        close.current();
       }
       if (e.key === "Tab") {
         const targets = [
