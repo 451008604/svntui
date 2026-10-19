@@ -44,13 +44,14 @@ func (s *Server) reply(w http.ResponseWriter, status int, data any) {
 	_ = json.NewEncoder(w).Encode(envelope{OK: true, Data: data})
 }
 func errorInfo(err error) *apiError {
+	message := diagnosticMessage(err, diagnosticLimit)
 	var p *apiError
 	if errors.As(err, &p) {
 		copy := *p
-		copy.Message = err.Error()
+		copy.Message = message
 		return &copy
 	}
-	p = &apiError{Code: "internal", Message: err.Error(), status: 500, exit: 1}
+	p = &apiError{Code: "internal", Message: message, status: 500, exit: 1}
 	var command *svn.CommandError
 	if errors.As(err, &command) {
 		p.Code = string(command.Kind)

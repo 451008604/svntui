@@ -151,7 +151,9 @@ func (s *Server) runJob(preview *frozenPreview) {
 	}
 	if !started {
 		s.mu.Lock()
-		preview.startErr = err
+		if err != nil {
+			preview.startErr = errorInfo(err)
+		}
 		if preview.startErr == nil {
 			preview.startErr = problem(500, "internal", "操作未通过启动检查")
 		}
@@ -167,16 +169,16 @@ func (s *Server) runJob(preview *frozenPreview) {
 	var persistenceErr error
 	if mutationErr == nil && preview.Action == "commit" {
 		if clearErr := s.clearDraft(preview.project, preview.identity); clearErr != nil {
-			persistenceErr = fmt.Errorf("提交成功，但保存草稿清除状态失败: %w", clearErr)
+			persistenceErr = stageError("提交成功，但保存草稿清除状态失败", clearErr)
 		}
 	}
 	_, refreshErr := s.workspace(ctx, preview.project, false)
 	if refreshErr != nil {
-		refreshErr = fmt.Errorf("操作后刷新工作副本状态失败: %w", refreshErr)
+		refreshErr = stageError("操作后刷新工作副本状态失败", refreshErr)
 	}
-	err = errors.Join(mutationErr, persistenceErr, refreshErr)
+	err = errors.Join(stageError("SVN 写入失败", mutationErr), persistenceErr, refreshErr)
 	if len(job.Output) > outputLimit {
-		job.Output = job.Output[:outputLimit]
+		job.Output = boundedJobOutput(job.Output)
 		err = errors.Join(err, problem(413, "output_limit", "任务输出超过 1 MiB，已截断显示"))
 	}
 	if err != nil {
