@@ -6,7 +6,7 @@ The scripts create test data and perform destructive SVN operations **only in ne
 
 ## Requirements and configuration
 
-- Python 3.9+ and native `svn` / `svnadmin` on PATH. Optional `svnmucc` speeds up the real 125-revision seed.
+- Python 3.9+ and native `svn` / `svnadmin` on PATH. Optional `svnmucc` speeds up the real 125-revision seed on POSIX. Windows uses the slower ordinary SVN working-copy commit fallback because some Windows `svnmucc` builds corrupt Chinese commit messages.
 - Node 24 and an installed Playwright module (acceptance used 1.62.1).
 - An installed native Chromium-family browser. Chrome, Chromium and Windows Edge use Playwright's Chromium driver; this does not test Safari.
 - A built `svntui` containing the frontend assets under review.

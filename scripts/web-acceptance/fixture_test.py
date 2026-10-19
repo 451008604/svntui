@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Exercise verification output with real POSIX/Windows path semantics, without SVN IO."""
+"""Exercise fixture tool selection and POSIX/Windows verification paths without SVN IO."""
 from pathlib import PurePosixPath, PureWindowsPath
+import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import call, patch
 import xml.etree.ElementTree as ET
 
 import fixture
@@ -28,6 +29,34 @@ class WindowsPath(MemoryIO, PureWindowsPath):
 
 class PosixPath(MemoryIO, PurePosixPath):
     pass
+
+
+class HistorySeedToolTest(unittest.TestCase):
+    def test_prepare_selects_platform_safe_history_seed_tool(self):
+        for platform, available_mucc in (('nt', '/tools/svnmucc'),
+                                         ('posix', '/tools/svnmucc'),
+                                         ('posix', None)):
+            with self.subTest(platform=platform, available_mucc=available_mucc):
+                with tempfile.TemporaryDirectory() as root:
+                    builder = fixture.Fixture(root)
+                    with patch.object(fixture.os, 'name', platform), patch.object(
+                            fixture.shutil, 'which', side_effect=lambda name: (
+                                available_mucc if name == 'svnmucc' else '/tools/' + name)) as which, patch.object(
+                            builder, 'run') as run, patch.object(builder, 'svn'), patch.object(
+                            builder, 'commit') as commit:
+                        builder.prepare(revisions=2, large_bytes=0, mode='basic')
+                    history_message = 'history 002 ordinary'
+                    if platform == 'posix' and available_mucc:
+                        self.assertEqual(run.call_args.args[0][0], available_mucc)
+                        self.assertIn(history_message, run.call_args.args[0])
+                        self.assertEqual(commit.call_count, 1)  # Baseline only.
+                    else:
+                        commit.assert_any_call(history_message, 'history-0')
+                        self.assertEqual(run.call_count, 1)  # svnadmin only.
+                    if platform == 'nt':
+                        self.assertNotIn(call('svnmucc'), which.call_args_list)
+                    else:
+                        self.assertIn(call('svnmucc'), which.call_args_list)
 
 
 class VerifyPathsTest(unittest.TestCase):

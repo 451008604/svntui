@@ -73,7 +73,8 @@ class Fixture:
         self.svn('propset', 'fixture:color', 'base', peg(self.wc / 'prop-conflict.txt'))
         self.commit('fixture baseline 中文 & apostrophe\' <img src=x onerror=window.__svntui_injected=1>')
         # A real revision per commit ensures page cursors have more than 120 rows.
-        mucc = shutil.which('svnmucc')
+        # Some Windows svnmucc builds corrupt Chinese messages; use the WC fallback.
+        mucc = None if os.name == 'nt' else shutil.which('svnmucc')
         for revision in range(2, max(2, revisions + (mode == "basic"))):
             message = f'history {revision:03d} ' + ('needle 中文' if revision % 10 == 0 else 'ordinary')
             author = f'history-{revision % 2}'
